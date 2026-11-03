@@ -21,38 +21,25 @@ const script = await Deno.readTextFile("public/app.js");
 const styles = await Deno.readTextFile("src/style.css");
 
 await Deno.mkdir("./data", { recursive: true });
-const webDavProcess = new Deno.Command("rclone", {
-  args: [
-    "serve",
-    "webdav",
-    "./data",
-    "--addr",
-    `127.0.0.1:${webDavPort}`,
-    "--include",
-    `/${editorFile}`,
-  ],
-  stdout: "inherit",
-  stderr: "inherit",
-}).spawn();
 
 const webDavUrl = `http://127.0.0.1:${webDavPort}`;
-let webDavReady = false;
-for (let attempt = 0; attempt < 50; attempt++) {
+console.log(`Waiting for WebDAV on 127.0.0.1:${webDavPort}`);
+while (true) {
   try {
     await fetch(webDavUrl, {
       method: "OPTIONS",
       signal: AbortSignal.timeout(200),
     });
-    webDavReady = true;
     break;
   } catch (error) {
-    if (!(error instanceof TypeError)) throw error;
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    if (
+      !(error instanceof TypeError) &&
+      !(error instanceof DOMException && error.name === "TimeoutError")
+    ) {
+      throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
-}
-if (!webDavReady) {
-  webDavProcess.kill();
-  throw new Error("rclone did not become ready on the configured WebDAV port.");
 }
 console.log(`WebDAV listening on 127.0.0.1:${webDavPort} (rclone)`);
 
@@ -87,8 +74,7 @@ function proxyToWebDav(request: Request): Promise<Response> {
   });
 }
 
-try {
-  const appServer = Deno.serve(
+const appServer = Deno.serve(
     {
       hostname: "0.0.0.0",
       port,
@@ -155,8 +141,5 @@ try {
 
       return new Response("Not found", { status: 404 });
     },
-  );
-  await appServer.finished;
-} finally {
-  webDavProcess.kill();
-}
+);
+await appServer.finished;

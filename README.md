@@ -24,7 +24,7 @@ Edits are saved automatically after a short pause. The status indicator shows wh
 
 ## Access and transport
 
-This demo has no authentication. rclone is bound to loopback and filtered to `EDITOR_FILE`; the editor and its same-origin proxy are available on the forwarded app port. The app serves plain HTTP; use it only for local development or on a trusted network, and add authentication and TLS before exposing it elsewhere. The `start` task requires rclone to be installed and on `PATH`.
+This demo has no authentication. `deno task start` builds the app and runs the app and rclone tasks concurrently. The app waits for WebDAV to become available before serving requests. rclone is bound to loopback and filtered to `EDITOR_FILE`; the editor and its same-origin proxy are available on the forwarded app port. The app serves plain HTTP; use it only for local development or on a trusted network, and add authentication and TLS before exposing it elsewhere. The `serve:rclone` task requires rclone and a POSIX shell (`sh`) to be installed and on `PATH`.
 
 ## Validate
 
