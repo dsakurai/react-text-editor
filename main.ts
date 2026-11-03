@@ -1,9 +1,6 @@
-import { createWebDavHandler } from "./webdav.ts";
-
 const port = Number(Deno.env.get("APP_PORT") ?? "8000");
 const webDavPort = Number(Deno.env.get("WEBDAV_PORT") ?? "8788");
 const editorFile = Deno.env.get("EDITOR_FILE") ?? "notes.txt";
-const webDavUrl = `http://127.0.0.1:${webDavPort}`;
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {
   throw new Error("APP_PORT must be a valid TCP port.");
@@ -11,18 +8,53 @@ if (!Number.isInteger(port) || port < 1 || port > 65535) {
 if (!Number.isInteger(webDavPort) || webDavPort < 1 || webDavPort > 65535) {
   throw new Error("WEBDAV_PORT must be a valid TCP port.");
 }
+if (
+  !/^[A-Za-z0-9._-]+$/.test(editorFile) || editorFile === "." ||
+  editorFile === ".."
+) {
+  throw new Error(
+    "EDITOR_FILE must be a simple filename without path components.",
+  );
+}
 
 const script = await Deno.readTextFile("public/app.js");
 const styles = await Deno.readTextFile("src/style.css");
 
-const webDavServer = Deno.serve(
-  {
-    hostname: "127.0.0.1",
-    port: webDavPort,
-    onListen: ({ port }) => console.log(`WebDAV listening on 127.0.0.1:${port}`),
-  },
-  createWebDavHandler({ editorFile }),
-);
+await Deno.mkdir("./data", { recursive: true });
+const webDavProcess = new Deno.Command("rclone", {
+  args: [
+    "serve",
+    "webdav",
+    "./data",
+    "--addr",
+    `127.0.0.1:${webDavPort}`,
+    "--include",
+    `/${editorFile}`,
+  ],
+  stdout: "inherit",
+  stderr: "inherit",
+}).spawn();
+
+const webDavUrl = `http://127.0.0.1:${webDavPort}`;
+let webDavReady = false;
+for (let attempt = 0; attempt < 50; attempt++) {
+  try {
+    await fetch(webDavUrl, {
+      method: "OPTIONS",
+      signal: AbortSignal.timeout(200),
+    });
+    webDavReady = true;
+    break;
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+if (!webDavReady) {
+  webDavProcess.kill();
+  throw new Error("rclone did not become ready on the configured WebDAV port.");
+}
+console.log(`WebDAV listening on 127.0.0.1:${webDavPort} (rclone)`);
 
 function proxyToWebDav(request: Request): Promise<Response> {
   const headers = new Headers();
@@ -35,6 +67,7 @@ function proxyToWebDav(request: Request): Promise<Response> {
   target.protocol = "http:";
   target.hostname = "127.0.0.1";
   target.port = String(webDavPort);
+  target.pathname = target.pathname.slice("/dav".length);
 
   return fetch(target, {
     method: request.method,
@@ -54,18 +87,20 @@ function proxyToWebDav(request: Request): Promise<Response> {
   });
 }
 
-const appServer = Deno.serve(
-  {
-    hostname: "0.0.0.0",
-    port,
-    onListen: ({ port }) => console.log(`Editor listening on http://localhost:${port}`),
-  },
-  async (request) => {
-    const url = new URL(request.url);
+try {
+  const appServer = Deno.serve(
+    {
+      hostname: "0.0.0.0",
+      port,
+      onListen: ({ port }) =>
+        console.log(`Editor listening on http://localhost:${port}`),
+    },
+    async (request) => {
+      const url = new URL(request.url);
 
-    if (url.pathname === "/") {
-      return new Response(
-        `<!doctype html>
+      if (url.pathname === "/") {
+        return new Response(
+          `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8">
@@ -79,43 +114,49 @@ const appServer = Deno.serve(
     <script type="module" src="/app.js"></script>
   </body>
 </html>`,
-        { headers: { "content-type": "text/html; charset=utf-8" } },
-      );
-    }
+          { headers: { "content-type": "text/html; charset=utf-8" } },
+        );
+      }
 
-    if (url.pathname === "/app.js") {
-      return new Response(script, {
-        headers: {
-          "content-type": "text/javascript; charset=utf-8",
-          "cache-control": "no-store",
-        },
-      });
-    }
-
-    if (url.pathname === "/config") {
-      return Response.json({ filename: editorFile }, {
-        headers: { "cache-control": "no-store" },
-      });
-    }
-
-    if (url.pathname === "/style.css") {
-      return new Response(styles, {
-        headers: { "content-type": "text/css; charset=utf-8" },
-      });
-    }
-
-    if (url.pathname === `/dav/${encodeURIComponent(editorFile)}`) {
-      if (!["GET", "HEAD", "PUT", "OPTIONS", "PROPFIND"].includes(request.method)) {
-        return new Response("Method not allowed", {
-          status: 405,
-          headers: { allow: "GET, HEAD, PUT, OPTIONS, PROPFIND" },
+      if (url.pathname === "/app.js") {
+        return new Response(script, {
+          headers: {
+            "content-type": "text/javascript; charset=utf-8",
+            "cache-control": "no-store",
+          },
         });
       }
-      return await proxyToWebDav(request);
-    }
 
-    return new Response("Not found", { status: 404 });
-  },
-);
+      if (url.pathname === "/config") {
+        return Response.json({ filename: editorFile }, {
+          headers: { "cache-control": "no-store" },
+        });
+      }
 
-await Promise.all([appServer.finished, webDavServer.finished]);
+      if (url.pathname === "/style.css") {
+        return new Response(styles, {
+          headers: { "content-type": "text/css; charset=utf-8" },
+        });
+      }
+
+      if (url.pathname === `/dav/${encodeURIComponent(editorFile)}`) {
+        if (
+          !["GET", "HEAD", "PUT", "OPTIONS", "PROPFIND"].includes(
+            request.method,
+          )
+        ) {
+          return new Response("Method not allowed", {
+            status: 405,
+            headers: { allow: "GET, HEAD, PUT, OPTIONS, PROPFIND" },
+          });
+        }
+        return await proxyToWebDav(request);
+      }
+
+      return new Response("Not found", { status: 404 });
+    },
+  );
+  await appServer.finished;
+} finally {
+  webDavProcess.kill();
+}
