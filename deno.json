@@ -1,6 +1,13 @@
 {
   "nodeModulesDir": "auto",
+  "compilerOptions": {
+    "lib": ["deno.window", "dom", "dom.iterable"],
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
+  },
   "tasks": {
-    "start": "deno run --allow-net --allow-env=NODE_V8_COVERAGE,UNDICI_NO_FG,JEST_WORKER_ID,http_proxy,HTTP_PROXY,https_proxy,HTTPS_PROXY,no_proxy,NO_PROXY,CI main.ts"
+    "build": "deno run --allow-env --allow-read=.,node_modules --allow-write=public --allow-run build.ts",
+    "start": "deno task build && deno run --allow-net --allow-env=APP_PORT,WEBDAV_PORT,EDITOR_FILE --allow-read=.,node_modules,public --allow-write=./data main.ts",
+    "test": "deno test --allow-read --allow-write --allow-env webdav.test.ts"
   }
 }
