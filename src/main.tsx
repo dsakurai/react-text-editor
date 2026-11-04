@@ -9,8 +9,11 @@ function NotesEditor() {
   const [status, setStatus] = useState<SaveStatus>("loading");
   const [error, setError] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [externalText, setExternalText] = useState<string | null>(null);
+  const [saveEpoch, setSaveEpoch] = useState(0);
   const version = useRef(0);
   const lastSavedText = useRef("");
+  const pendingExternal = useRef<string | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -60,7 +63,52 @@ function NotesEditor() {
   }, []);
 
   useEffect(() => {
-    if (!loaded || text === lastSavedText.current) return;
+    if (!loaded) return;
+
+    let active = true;
+    let timeout: ReturnType<typeof setTimeout>;
+
+    async function checkForExternalChanges() {
+      try {
+        const response = await fetch("/document", {
+          cache: "no-store",
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          throw new Error(
+            `Could not check ${filename} for external changes (HTTP ${response.status}).`,
+          );
+        }
+        const contents = await response.text();
+        if (active && contents !== lastSavedText.current) {
+          pendingExternal.current = contents;
+          setExternalText(contents);
+        }
+      } catch (cause) {
+        if (active) {
+          setError(
+            cause instanceof Error
+              ? cause.message
+              : "Could not check for external changes.",
+          );
+          setStatus("error");
+        }
+      } finally {
+        if (active) timeout = setTimeout(checkForExternalChanges, 3000);
+      }
+    }
+
+    timeout = setTimeout(checkForExternalChanges, 3000);
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+    };
+  }, [filename, loaded]);
+
+  useEffect(() => {
+    if (!loaded || externalText !== null || text === lastSavedText.current) {
+      return;
+    }
 
     const snapshot = text;
     const savedVersion = version.current;
@@ -96,7 +144,26 @@ function NotesEditor() {
     }, 500);
 
     return () => clearTimeout(timeout);
-  }, [filename, loaded, text]);
+  }, [externalText, filename, loaded, saveEpoch, text]);
+
+  function reloadExternal() {
+    if (pendingExternal.current === null) return;
+    version.current += 1;
+    setText(pendingExternal.current);
+    lastSavedText.current = pendingExternal.current;
+    pendingExternal.current = null;
+    setExternalText(null);
+    setError("");
+    setStatus("saved");
+  }
+
+  function keepEditorVersion() {
+    if (pendingExternal.current === null) return;
+    lastSavedText.current = pendingExternal.current;
+    pendingExternal.current = null;
+    setExternalText(null);
+    setSaveEpoch((epoch) => epoch + 1);
+  }
 
   function retrySave() {
     if (!loaded) return;
@@ -173,6 +240,20 @@ function NotesEditor() {
             >
               {loaded ? "Retry save" : "Retry loading"}
             </button>
+          </div>
+        )}
+
+        {externalText !== null && (
+          <div className="external-change" role="alert">
+            <span>This file changed outside the editor.</span>
+            <div className="external-change-actions">
+              <button type="button" onClick={reloadExternal}>
+                Load external version
+              </button>
+              <button type="button" onClick={keepEditorVersion}>
+                Keep my edits
+              </button>
+            </div>
           </div>
         )}
 

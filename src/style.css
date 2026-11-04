@@ -203,6 +203,40 @@ textarea:disabled {
   background: #f7e9e5;
 }
 
+.external-change {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -20px 0 20px;
+  padding: 11px 13px;
+  border: 1px solid #e8d8a8;
+  border-radius: 5px;
+  background: #fffdf5;
+  color: #75602b;
+  font-size: 12px;
+}
+
+.external-change-actions {
+  display: flex;
+  flex: none;
+  gap: 8px;
+}
+
+.external-change button {
+  padding: 4px 8px;
+  border: 1px solid #d6c48e;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.external-change button:hover {
+  background: #f7f0d9;
+}
+
 .footnote {
   margin: 32px 0 27px;
   color: #a5a69e;
@@ -228,6 +262,11 @@ textarea:disabled {
 
   .save-status {
     font-size: 11px;
+  }
+
+  .external-change {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .editor-shell {

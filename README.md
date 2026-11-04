@@ -10,7 +10,7 @@ deno task start
 
 Open the **Notes editor** port (8000).
 
-Edits are saved automatically after a short pause. The status indicator shows when changes are saving, saved, or need attention; a failed write can be retried.
+Edits are saved automatically after a short pause. The status indicator shows when changes are saving, saved, or need attention; a failed write can be retried. The editor checks for external file changes every three seconds and lets you load the external version or keep your editor contents.
 
 ## Configuration
 
