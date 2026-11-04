@@ -7,8 +7,7 @@
   },
   "tasks": {
     "build": "deno run --allow-env --allow-read=.,node_modules --allow-write=public --allow-run build.ts",
-    "serve:rclone": "sh -c 'mkdir -p ./data && exec rclone serve webdav ./data --addr \"127.0.0.1:${WEBDAV_PORT:-8788}\" --include \"/${EDITOR_FILE:-notes.txt}\"'",
-    "serve:app": "deno run --allow-net --allow-env=APP_PORT,WEBDAV_PORT,EDITOR_FILE --allow-read=.,node_modules,public --allow-write=./data main.ts",
-    "start": "deno task build && deno task 'serve:*'"
+    "serve:app": "deno run --allow-net --allow-env=APP_PORT,EDITOR_FILE --allow-read=.,node_modules,public,./data --allow-write=./data main.ts",
+    "start": "deno task build && deno task serve:app"
   }
 }

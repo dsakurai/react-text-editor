@@ -5,7 +5,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     locales sudo ca-certificates git \
-    rclone \
     && rm -rf /var/lib/apt/lists/* \
     # Set locale, since it is often required by programs 
     && echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && locale-gen \
